@@ -1,6 +1,6 @@
 #!/bin/bash
 
-./collect_data.py >> collect_data.log 2>&1 &
+cd $(dirname "${BASH_SOURCE[0]}")
 
-./manage.py runserver 0.0.0.0:8000 >> runserver.log 2>&1 &\
+./collect_data.py >> collect_data.log 2>&1 &
 
