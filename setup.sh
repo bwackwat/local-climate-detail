@@ -10,6 +10,5 @@ pip3 install adafruit-circuitpython-bme280 django bootstrap4 mysqlclient
 sudo mysql -u root < setup.sql
 
 # Add something like this to /etc/rc.local to run collect_data.py on boot.
-# /home/pi/workspace/local-climate-detail/collect_data.py >> /home/pi/workspace/collect_data.log 2>&1 &
+# @reboot pi /home/pi/workspace/local-climate-detail/start.sh
 
-which python3
