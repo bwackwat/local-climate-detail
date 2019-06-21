@@ -1,9 +1,12 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import json
+import sys
 
 from django.shortcuts import render, redirect
 from django import forms
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.db.models import Min, Max
 
 from lcd.models import *
 
@@ -32,12 +35,27 @@ def create_location(request):
 
 
 def get_data(request):
-    location = SensorLocation.objects.filter(pk=request.GET.get('location'))
+    location = SensorLocation.objects.filter(pk=request.GET.get('location')).first()
     if location is None:
-        raise SensorLocation.DoesNotExist
+        location = SensorLocation.objects.filter(current=True).first()
 
-    end_date = date.today()
-    start_date = end_date - timedelta(days=1)
-    data = ClimateData.objects.filter(location=location, date__range=[start_date, end_date])
+
+    if request.GET.get('end_date'):
+        print(request.GET.get('end_date'), file=sys.stderr)
+        end_date = datetime.strptime(request.GET.get('end_date'), '%a, %d %b %Y %H:%M:%S %Z')
+        print(end_date, file=sys.stderr)
+    else:
+        end_date = date.today()
+
+    if request.GET.get('start_date'):
+        start_date = datetime.strptime(request.GET.get('start_date'), '%a, %d %b %Y %H:%M:%S %Z')
+    else:
+        start_date = end_date - timedelta(days=1)
     
-    return HttpResponse(json.dumps(data), content_type='application/json')
+    climate_data = ClimateData.objects.filter(location=location, date__range=[start_date, end_date])
+
+    return JsonResponse({
+        "data": list(climate_data.values())
+        #"min_temperature": climate_data.aggregate(Min('temperature'))['temperature__min'],
+        #"max_temperature": climate_data.aggregate(Max('temperature'))['temperature__max']
+    })

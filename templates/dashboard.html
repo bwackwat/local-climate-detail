@@ -1,3 +1,242 @@
-{% if user.is_authenticated and user.is_superuser %}
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
 
-{% endif %}
+<style type="text/css">
+    .line {
+        fill: none;
+        stroke: black;
+        stroke-width: 1;
+    }
+    
+    .overlay {
+        fill: none;
+        pointer-events: all;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col">
+        <div class="form-check">
+            <label class="form-check-label">
+                <input type="radio" class="form-check-input" name="value_select" value="temperature" checked="checked">Temperature
+            </label>
+        </div>
+        <div class="form-check">
+            <label class="form-check-label">
+                <input type="radio" class="form-check-input" name="value_select" value="humidity">Humidity
+            </label>
+        </div>
+        <div class="form-check">
+            <label class="form-check-label">
+                <input type="radio" class="form-check-input" name="value_select" value="pressure">Pressure
+            </label>
+        </div>
+    </div>
+    </div>
+    <div class="row flex-fill">
+        <svg id="graph" width="90%"></svg>
+    </div>
+</div>
+
+<script>
+var selected_data = 'temperature';
+var current_data = [];
+function update_graph(){
+    $("#graph").empty();
+
+    // Get window ratio, get and set height from ratio and width.
+    var ratio = window.innerWidth / window.innerHeight;
+    var width = $("#graph").width();
+    var height = width / ratio;
+    $("#graph").css({"height": height});
+
+    // X and Y margins are 5% of graph width
+    var x_margin = width * 5 / 100;
+    var y_margin = height * 5 / 100;
+
+    // X scale is actually the date of the data point
+    var xScale = d3.scaleTime()
+        .domain([current_data[0].date, current_data[current_data.length - 1].date])
+        .range([x_margin, width - x_margin]);
+
+    var min = d3.min(current_data, function(d) { return d[selected_data]; });
+    var max = d3.max(current_data, function(d) { return d[selected_data]; });
+
+    // Give some margin on the Y graph values, 10%.
+    y_range_offset = (max - min) * 1 / 10;
+
+    // Y scale is the temperature values in C.
+    var yScale = d3.scaleLinear()
+        .domain([min - y_range_offset, max + y_range_offset]) // input 
+        .range([height - y_margin, y_margin]); // output 
+
+    // Draw line based on X and Y scales.
+    var line = d3.line()
+        .x(function(d) { return xScale(d.date); })
+        .y(function(d) { return yScale(d[selected_data]); })
+        .curve(d3.curveMonotoneX) // apply smoothing to the line
+
+    var svg = d3.select("#graph");
+
+    // Time formatted xAxis.
+    var xAxis = d3.axisBottom(xScale).tickFormat(d3.timeFormat("%d %b %I%p"));
+
+    // Create X axis graphic based on a simple scale, and translateds to fit in the SVG.
+    svg.append("g").attr("class", "x axis").attr("transform", "translate(0," + (height - y_margin) + ")").call(xAxis);
+
+    // Create Y axis graphic based on a scale, and translated to fit in the SVG.
+    svg.append("g").attr("class", "y axis").attr("transform", "translate(" + x_margin + ",0)").call(d3.axisLeft(yScale));
+
+    // Create line graphic based on the line function using our data.
+    svg.append("path").datum(current_data).attr("class", "line").attr("d", line);
+    
+    var focus = svg.append("g").style("display", "none");
+
+   // append the x line
+    focus.append("line")
+        .attr("class", "x")
+        .style("stroke", "blue")
+        .style("stroke-dasharray", "3,3")
+        .style("opacity", 0.5)
+        .attr("y1", 0)
+        .attr("y2", height);
+
+    // append the y line
+    focus.append("line")
+        .attr("class", "y")
+        .style("stroke", "blue")
+        .style("stroke-dasharray", "3,3")
+        .style("opacity", 0.5)
+        .attr("x1", width)
+        .attr("x2", width);
+
+    // append the circle at the intersection
+    focus.append("circle")
+        .attr("class", "y")
+        .style("fill", "none")
+        .style("stroke", "blue")
+        .attr("r", 4);
+
+    // place the value at the intersection
+    focus.append("text")
+        .attr("class", "y1")
+        .style("stroke", "white")
+        .style("stroke-width", "3.5px")
+        .style("opacity", 0.8)
+        .attr("dx", 8)
+        .attr("dy", "-.3em");
+    focus.append("text")
+        .attr("class", "y2")
+        .attr("dx", 8)
+        .attr("dy", "-.3em");
+
+    // place the date at the intersection
+    focus.append("text")
+        .attr("class", "y3")
+        .style("stroke", "white")
+        .style("stroke-width", "3.5px")
+        .style("opacity", 0.8)
+        .attr("dx", 8)
+        .attr("dy", "1em");
+    focus.append("text")
+        .attr("class", "y4")
+        .attr("dx", 8)
+        .attr("dy", "1em");
+    
+    // append the rectangle to capture mouse
+    svg.append("rect")
+        .attr("width", width)
+        .attr("height", height)
+        .style("fill", "none")
+        .style("pointer-events", "all")
+        .on("mouseover", function() { focus.style("display", null); })
+        .on("mouseout", function() { focus.style("display", "none"); })
+        .on("mousemove", mousemove);
+
+    var bisectDate = d3.bisector(function(d) { return d.date; }).left;
+    var formatDate = d3.timeFormat("%d %b %I:%M:%S")
+
+    function mousemove() {
+		var x0 = xScale.invert(d3.mouse(this)[0]),
+		    i = bisectDate(current_data, x0, 1),
+		    d0 = current_data[i - 1],
+		    d1 = current_data[i],
+		    d = x0 - d0.date > d1.date - x0 ? d1 : d0;
+
+		focus.select("circle.y")
+		    .attr("transform",
+		          "translate(" + xScale(d.date) + "," +
+		                         yScale(d[selected_data]) + ")");
+
+		focus.select("text.y1")
+		    .attr("transform",
+		          "translate(" + xScale(d.date) + "," +
+		                         yScale(d[selected_data]) + ")")
+		    .text(d[selected_data]);
+
+		focus.select("text.y2")
+		    .attr("transform",
+		          "translate(" + xScale(d.date) + "," +
+		                         yScale(d[selected_data]) + ")")
+		    .text(d[selected_data]);
+
+		focus.select("text.y3")
+		    .attr("transform",
+		          "translate(" + xScale(d.date) + "," +
+		                         yScale(d[selected_data]) + ")")
+		    .text(formatDate(d.date));
+
+		focus.select("text.y4")
+		    .attr("transform",
+		          "translate(" + xScale(d.date) + "," +
+		                         yScale(d[selected_data]) + ")")
+		    .text(formatDate(d.date));
+
+		focus.select(".x")
+		    .attr("transform",
+		          "translate(" + xScale(d.date) + "," +
+		                         yScale(d[selected_data]) + ")")
+		               .attr("y2", height - yScale(d[selected_data]));
+
+		focus.select(".y")
+		    .attr("transform",
+		          "translate(" + width * -1 + "," +
+		                         yScale(d[selected_data]) + ")")
+		               .attr("x2", width + width);
+	}
+}
+
+function update_data(){
+    var start_date = new Date();
+    start_date.setHours(0,0,0,0);
+    var end_date = new Date();
+    end_date.setHours(23,59,59,999);
+
+    data_url = '{% url 'get-data' %}?start_date=' + start_date.toUTCString() + "&end_date=" + end_date.toUTCString();
+    $.ajax({
+        url:  data_url,
+        type:  'get',
+        dataType:  'json',
+        success: function  (data) {
+            current_data = data.data;
+            for (var i = 0; i < current_data.length; i++) {
+
+                current_data[i].date = new Date(current_data[i].date);
+            }
+            update_graph();
+        }
+    });
+}
+
+$('input[type=radio][name=value_select]').on('change', function() {
+    selected_data = $(this).val();
+    update_graph();
+});
+
+$( window ).resize(function() {
+    update_graph();
+});
+
+update_data();
+</script>
